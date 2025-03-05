@@ -1,3 +1,4 @@
+import os
 import argparse
 from selenium import webdriver
 from amazoncaptcha import AmazonCaptcha
@@ -82,11 +83,11 @@ class AmazonScraper:
 
         # Locate and enter email
         email_field = driver.find_element(By.ID, "ap_email")
-        email_field.send_keys("adityamanikonda123@gmail.com") 
+        email_field.send_keys(os.environ.get("EMAIL")) 
 
         # # Locate and enter password
         password_field = driver.find_element(By.ID, "ap_password")
-        password_field.send_keys("Adiman1782$")
+        password_field.send_keys(os.environ.get("PASSWORD"))
 
         # # Click login button
         login_button = driver.find_element(By.ID, "signInSubmit")
