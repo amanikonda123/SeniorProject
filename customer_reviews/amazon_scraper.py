@@ -1,7 +1,11 @@
 import argparse
 from selenium import webdriver
+from amazoncaptcha import AmazonCaptcha
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.service import Service  # NEW IMPORT
 from bs4 import BeautifulSoup
 import time
+import streamlit as st
 
 class AmazonScraper:
     __wait_time = 0.5
@@ -41,40 +45,73 @@ class AmazonScraper:
 
         # data-asin grabs products, while data-avar filters out sponsored ads
         listings = soup.findAll('div', attrs={'data-asin': True, 'data-avar': False})
-
-        asin_values = [single_listing['data-asin'] for single_listing in listings if len(single_listing['data-asin']) != 0]
+        asin_values = [single_listing['data-asin'] for single_listing in listings if single_listing['data-asin']]
 
         assert len(asin_values) > 0
-
         return asin_values[0]
 
     def __get_rated_reviews(self, url: str, headless: bool = True):
-        # setting up a headless web driver to get search query
+        # 1. Create ChromeOptions
         options = webdriver.ChromeOptions()
         if headless:
             options.add_argument("--headless=new")
+        
+        # 2. Point to your Chrome installation
+        #    (Adjust the path if your Chrome is installed elsewhere)
+        options.binary_location = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+
+        # 4. Pass both service and options
         driver = webdriver.Chrome(options=options)
+
+        driver.get("https://www.amazon.com/errors/validateCaptcha")
+
+        # Get the captcha image link
+        link = driver.find_element(By.XPATH, '//div[@class="a-row a-text-center"]/img').get_attribute("src")
+
+        # Solve the captcha using amazon captcha
+        captcha = AmazonCaptcha.fromlink(link)
+        captcha_value = AmazonCaptcha.solve(captcha)
+
+        # Enter the solved captcha text
+        input_field = driver.find_element(By.ID, "captchacharacters")
+        input_field.send_keys(captcha_value)
+
+        # Click the submit button
+        button = driver.find_element(By.CLASS_NAME, "a-button-text")
+        button.click()
+
+        # Locate and enter email
+        email_field = driver.find_element(By.ID, "ap_email")
+        email_field.send_keys("adityamanikonda123@gmail.com") 
+
+        # # Locate and enter password
+        password_field = driver.find_element(By.ID, "ap_password")
+        password_field.send_keys("Adiman1782$")
+
+        # # Click login button
+        login_button = driver.find_element(By.ID, "signInSubmit")
+        login_button.click()
 
         driver.get(url)
         driver.implicitly_wait(AmazonScraper.__wait_time)
 
         html_page = driver.page_source
         driver.quit()
+        st.write("URL:", url)
+        st.write("HTML PAGE:", html_page)
 
         soup = BeautifulSoup(html_page, 'lxml')
         html_reviews = soup.findAll('div', attrs={"data-hook": "review"})
 
+        st.write("HTML Reviews:", html_reviews)
         reviews = []
         # extract text from various span tags and clean up newlines in their strings
         for html_review in html_reviews:
-            name = html_review.find('span', class_='a-profile-name').text.strip()    
-
+            name = html_review.find('span', class_='a-profile-name').text.strip()
             # Amazon's format is "x.0 stars out of 5" where x = # of stars
             rating = html_review.find('span', class_='a-icon-alt').text.strip()[0]
-
             review_body = html_review.find('span', attrs={'data-hook': 'review-body'}).text.strip()
-
-            reviews.append({'customer_name': name, 'rating': int(rating),'review': review_body})
+            reviews.append({'customer_name': name, 'rating': int(rating), 'review': review_body})
 
         return reviews
 
@@ -82,44 +119,48 @@ class AmazonScraper:
         if num_reviews % 5 != 0:
             raise ValueError(f"num_reviews parameter provided, {num_reviews}, is not divisible by 5")
 
-        base_url = AmazonScraper.__amazon_review_url + asin
+        base_url = self.__amazon_review_url + asin
         overall_reviews = []
 
         for star_num in range(1, 6):
-            url = base_url + AmazonScraper.__star_page_suffix[star_num]
-
+            url = base_url + self.__star_page_suffix[star_num]
+            st.write("URL:", url)
             page_number = 1
             reviews = []
-            reviews_per_star = int(num_reviews / 5)
+            reviews_per_star = num_reviews // 5
 
             while len(reviews) <= reviews_per_star:
                 page_url = url + str(page_number)
 
                 # no reviews means we've exhausted all reviews
                 page_reviews = self.__get_rated_reviews(page_url, headless)
-
-                if len(page_reviews) == 0:
+                if not page_reviews:
                     break
 
                 reviews += page_reviews
                 page_number += 1
 
+                # Add a 30-second delay after each request
+                time.sleep(30)
+
             # shave off extra reviews coming from the last page
             reviews = reviews[:reviews_per_star]
             overall_reviews += reviews
 
+        st.write("Overall Reviews:", overall_reviews)
         return overall_reviews
 
     def get_closest_product_reviews(self, search_query: str, num_reviews: int, headless: bool = True, debug: bool = False):
-        if len(search_query) == 0:
-            raise ValueError(f'Search query provided is an empty string')
+        if not search_query:
+            raise ValueError('Search query provided is an empty string')
 
         if debug:
             start = time.time()
 
         html_page = self.__get_amazon_search_page(search_query, headless)
+        st.write("HTML Response:", html_page)
         product_asin = self.__get_closest_product_asin(html_page)
-        reviews = self.__get_reviews(asin = product_asin, num_reviews = num_reviews, headless = headless)
+        reviews = self.__get_reviews(asin=product_asin, num_reviews=num_reviews, headless=headless)
 
         if debug:
             end = time.time()
@@ -127,23 +168,27 @@ class AmazonScraper:
 
         return reviews
 
-    def get_product_reviews_by_asin(self, product_asin: str, num_reviews: int, headless: bool = True, debug: bool = False):
-        if len(product_asin) == 0:
-            raise ValueError(f'ASIN provided is an empty string')
+    def get_product_reviews_by_asin(self, product_asin: str, num_reviews: int, headless: bool = False, debug: bool = False):
+        if not product_asin:
+            raise ValueError('ASIN provided is an empty string')
 
         if debug:
             start = time.time()
 
-        reviews = self.__get_reviews(asin = product_asin, num_reviews = num_reviews, headless = headless)
+        reviews = self.__get_reviews(asin=product_asin, num_reviews=num_reviews, headless=headless)
 
         if debug:
             end = time.time()
             print(f"{round(end - start, 2)} seconds taken")
 
         return reviews
-    
+
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(prog='AmazonScraper', description='Fetch Amazon product reviews based on a search query or ASIN.')
+    parser = argparse.ArgumentParser(
+        prog='AmazonScraper',
+        description='Fetch Amazon product reviews based on a search query or ASIN.'
+    )
 
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument('--query', type=str, help='Product search query to fetch reviews for')
@@ -160,16 +205,16 @@ if __name__ == "__main__":
     
     if args.query:
         reviews = scraper.get_closest_product_reviews(
-            search_query=args.query, 
-            num_reviews=args.num_reviews, 
-            headless=args.headless, 
+            search_query=args.query,
+            num_reviews=args.num_reviews,
+            headless=args.headless,
             debug=args.debug
         )
     elif args.asin:
         reviews = scraper.get_product_reviews_by_asin(
-            product_asin=args.asin, 
-            num_reviews=args.num_reviews, 
-            headless=args.headless, 
+            product_asin=args.asin,
+            num_reviews=args.num_reviews,
+            headless=args.headless,
             debug=args.debug
         )
 

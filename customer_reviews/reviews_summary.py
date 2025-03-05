@@ -13,6 +13,7 @@ from langchain.chains import LLMChain, StuffDocumentsChain
 from langchain.chains.summarize import load_summarize_chain
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.chains import MapReduceDocumentsChain, ReduceDocumentsChain
+import streamlit as st
 
 # packages for print output notifications
 from io import StringIO
@@ -151,6 +152,7 @@ def get_review_summary(inp_opt: str, prod_query: str, cust_count: int) -> tuple[
 
     # generating df from the scrap data
     df = pd.DataFrame.from_dict(cust_reviews)
+    st.write("Columns in DataFrame:", df.columns.tolist())
     df.sort_values(by=["rating"], ascending=False, inplace=True)
     df.reset_index(inplace=True)
 
