@@ -4,6 +4,8 @@ from selenium import webdriver
 from amazoncaptcha import AmazonCaptcha
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service  # NEW IMPORT
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
 import time
 import streamlit as st
@@ -81,30 +83,42 @@ class AmazonScraper:
         button = driver.find_element(By.CLASS_NAME, "a-button-text")
         button.click()
 
-        # Locate and enter email
-        email_field = driver.find_element(By.ID, "ap_email")
-        email_field.send_keys(os.environ.get("EMAIL")) 
+        driver.get("https://www.amazon.com")
 
-        # # Locate and enter password
-        password_field = driver.find_element(By.ID, "ap_password")
+        wait = WebDriverWait(driver, 10)  # up to 10 seconds
+        account_lists_button = wait.until(
+            EC.element_to_be_clickable((By.ID, "nav-link-accountList"))
+        )
+        account_lists_button.click()
+
+        # 3. Wait for the email field on the sign-in page, then enter email
+        email_field = wait.until(EC.presence_of_element_located((By.ID, "ap_email")))
+        email_field.send_keys(os.environ.get("EMAIL"))
+
+        continue_button = driver.find_element(By.ID, "continue")
+        continue_button.click()
+
+        # 4. Enter password
+        password_field = wait.until(EC.presence_of_element_located((By.ID, "ap_password")))
         password_field.send_keys(os.environ.get("PASSWORD"))
 
-        # # Click login button
         login_button = driver.find_element(By.ID, "signInSubmit")
         login_button.click()
 
         driver.get(url)
-        driver.implicitly_wait(AmazonScraper.__wait_time)
+        wait = WebDriverWait(driver, 30)  # up to 15 seconds
+        wait.until(
+            EC.presence_of_all_elements_located((By.CSS_SELECTOR, '[data-hook="review"]'))
+        )
 
+        st.write("Final URL before scraping:", driver.current_url)
         html_page = driver.page_source
         driver.quit()
-        st.write("URL:", url)
-        st.write("HTML PAGE:", html_page)
 
         soup = BeautifulSoup(html_page, 'lxml')
         html_reviews = soup.findAll('div', attrs={"data-hook": "review"})
 
-        st.write("HTML Reviews:", html_reviews)
+        st.write("HTML Reviews (Before):", html_reviews)
         reviews = []
         # extract text from various span tags and clean up newlines in their strings
         for html_review in html_reviews:
@@ -114,6 +128,7 @@ class AmazonScraper:
             review_body = html_review.find('span', attrs={'data-hook': 'review-body'}).text.strip()
             reviews.append({'customer_name': name, 'rating': int(rating), 'review': review_body})
 
+        st.write("HTML Reviews (After):", html_reviews)
         return reviews
 
     def __get_reviews(self, asin: str, num_reviews: int, headless: bool = True):
