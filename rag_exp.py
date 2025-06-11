@@ -1,87 +1,129 @@
-# Install required packages (if not already installed)
-!pip install datasets mistralai faiss-cpu python-dotenv
-
-# Load environment variables from .env
-from dotenv import load_dotenv
 import os
-load_dotenv()  # This will load variables from a .env file in the current directory
-
-# Import necessary libraries
+import re
 import numpy as np
 import faiss
-from datasets import load_dataset
-from mistralai.client import MistralClient, ChatMessage
+import pickle
+from dotenv import load_dotenv
+from mistralai.client import MistralClient
+from customer_reviews.reviews_summary import get_review_summary
+from urllib.parse import urlparse
+import nltk
+nltk.download('punkt_tab')
 
-# Initialize Mistral client (ensure your .env file contains MISTRAL_API_KEY)
+
+# Load environment variables
+load_dotenv()
+
+# Initialize Mistral client
 client = MistralClient(api_key=os.getenv("MISTRAL_API_KEY"))
-model_name = "open-mistral-7b"  # Generative model name for chat responses
+model_name = "open-mistral-7b"
 
-# Define a function to generate text embeddings using Mistral's embedding endpoint
-def get_text_embedding(text):
-    response = client.embeddings(model="mistral-embed", input=[text])
-    embedding = np.array(response.data[0].embedding).astype("float32")
-    return embedding
+# --- Utility Functions ---
 
-# --- Load and Prepare the HotpotQA Dataset ---
-# We load a subset of the training data for demonstration.
-dataset = load_dataset("hotpot_qa", "distractor", split="train[:1000]")
-
-# Create documents by concatenating the list of context paragraphs.
-documents = []
-for example in dataset:
-    context_text = " ".join(example["context"])
-    documents.append(context_text)
-
-print("Loaded", len(documents), "documents.")
-
-# --- Generate Embeddings and Build FAISS Index ---
-# Generate an embedding for each document.
-embeddings = np.stack([get_text_embedding(doc) for doc in documents])
-
-# Build a FAISS vector index using L2 (Euclidean) distance.
-d = embeddings.shape[1]  # Dimension of the embeddings
-index = faiss.IndexFlatL2(d)
-index.add(embeddings)
-print("FAISS index built with", index.ntotal, "vectors.")
-
-# --- Define the Retrieval Function ---
-def retrieve_documents(query, documents, index, k=3):
+def extract_sku_from_url(url: str) -> str:
     """
-    Embed the query, search for the top-k most similar documents,
-    and return the concatenated text of these documents.
+    Extracts the numeric SKU from a Walmart product URL.
     """
-    q_embedding = get_text_embedding(query)
-    q_embedding = np.array([q_embedding])
-    distances, indices = index.search(q_embedding, k)
-    retrieved_text = " ".join([documents[i] for i in indices[0]])
-    return retrieved_text
+    parsed = urlparse(url)
+    segments = [seg for seg in parsed.path.split('/') if seg]
+    if segments and segments[-1].isdigit():
+        return segments[-1]
+    match = re.search(r"/(\d{5,})(?:$|\?)", url)
+    return match.group(1) if match else ""
 
-# --- Define the Mistral Chat Call ---
-def run_mistral(prompt):
-    """
-    Send the prompt to the Mistral Chat API and return the response.
-    """
-    messages = [ChatMessage(role="user", content=prompt)]
-    response = client.chat(model=model_name, messages=messages)
-    return response.choices[0].message.content
 
-# --- Define the Standard RAG Pipeline ---
-def standard_rag(query, documents, index):
+def get_text_embedding(text: str) -> np.ndarray:
     """
-    Retrieve context based on the query and then generate an answer
-    using the Mistral Chat API.
+    Generate and return a float32 numpy embedding for the given text
+    using Mistral's embedding endpoint.
     """
-    retrieved_context = retrieve_documents(query, documents, index, k=3)
+    resp = client.embeddings(model="mistral-embed", input=[text])
+    return np.array(resp.data[0].embedding, dtype="float32")
+
+
+def chunk_reviews(texts: list) -> list:
+    """
+    Split each review into sentences for granular retrieval.
+    """
+    chunks = []
+    for text in texts:
+        chunks.extend(nltk.sent_tokenize(text))
+    return chunks
+
+
+def get_or_build_index(sku: str, chunks: list) -> (faiss.IndexFlatL2, list):
+    """
+    Load cached embeddings/docs if available, otherwise compute and cache them.
+    Returns a FAISS index and the list of text chunks.
+    """
+    cache_dir = ".cache_embeddings"
+    os.makedirs(cache_dir, exist_ok=True)
+    emb_path = os.path.join(cache_dir, f"{sku}_embeddings.npy")
+    docs_path = os.path.join(cache_dir, f"{sku}_docs.pkl")
+
+    if os.path.exists(emb_path) and os.path.exists(docs_path):
+        embeddings = np.load(emb_path)
+        with open(docs_path, 'rb') as f:
+            docs = pickle.load(f)
+    else:
+        embeddings = np.stack([get_text_embedding(chunk) for chunk in chunks])
+        docs = chunks
+        np.save(emb_path, embeddings)
+        with open(docs_path, 'wb') as f:
+            pickle.dump(docs, f)
+
+    dim = embeddings.shape[1]
+    index = faiss.IndexFlatL2(dim)
+    index.add(embeddings)
+    return index, docs
+
+
+def retrieve_documents(query: str, docs: list, index: faiss.IndexFlatL2, k: int = 3) -> str:
+    """
+    Retrieve top-k most similar document chunks for the query.
+    Returns the concatenated text of those chunks.
+    """
+    q_emb = get_text_embedding(query).reshape(1, -1)
+    _, idxs = index.search(q_emb, k)
+    return " ".join(docs[i] for i in idxs[0])
+
+
+def run_mistral(prompt: str) -> str:
+    """
+    Send the prompt to Mistral Chat and return the generated response.
+    """
+    messages = [{"role": "user", "content": prompt}]
+    resp = client.chat(model=model_name, messages=messages)
+    return resp.choices[0].message.content
+
+
+def run_rag_on_reviews(product_url: str, query: str, top_k: int = 3) -> (str, str):
+    """
+    Full RAG workflow for reviews:
+      1. Extract SKU
+      2. Scrape/load reviews
+      3. Split reviews into chunks
+      4. Load/build FAISS index (cached)
+      5. Retrieve context
+      6. Call Mistral for answer
+      Returns (answer, retrieved_context).
+    """
+    sku = extract_sku_from_url(product_url)
+    if not sku:
+        raise ValueError("Invalid product URL: could not extract SKU.")
+
+    _, df_reviews, _ = get_review_summary("CSV", sku)
+    texts = df_reviews["text"].astype(str).tolist()
+    chunks = chunk_reviews(texts)
+
+    index, docs = get_or_build_index(sku, chunks)
+
+    context = retrieve_documents(query, docs, index, k=top_k)
     prompt = (
-        f"Answer the following question based on the provided context.\n\n"
-        f"Context: {retrieved_context}\n\n"
+        f"Answer the following question based on the provided customer reviews context.\n\n"
+        f"Context: {context}\n\n"
         f"Question: {query}\n"
         f"Answer:"
     )
-    return run_mistral(prompt)
-
-# --- Test the Pipeline ---
-query = "What is the favorite color of the women who invented 'Troopers'?"
-answer = standard_rag(query, documents, index)
-print("Query:", query)
-print("Answer:", answer)
+    answer = run_mistral(prompt)
+    return answer, context

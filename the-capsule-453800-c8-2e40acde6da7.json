@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "the-capsule-453800-c8",
+  "private_key_id": "2e40acde6da759d5d79333d33bb4db327b6f91fe",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCcfB+uJVZNKvZ6\ne8Nt3SRCosT174A8cY6v0t+JzIdhko0Fvbdgh4ztd4F1pnd1eJ/fRbJxq2TAvH+j\nNEeQECEg/sDPQcVaGqFawBMMgToUaGZmd/uhshd9dU2J4u/PA9F4fzRXYDGSrA0A\nl5/sfZHjSRtE/3zAdhERW5KD8FG2/A3q6t4zXWyZwx5o+BMB7yO/HV1LDu4uEXbR\nxz6ALmc1osywlFGnAcBmBkIWivCvnh8sCGmXO7Zz1RHOS2SLR4SAk5SR1aN3T3Aa\nLG1pElt1pzO1uRc10YN5iLWb7UrCe7BI476ho3pNmPa9SD07MAZGIxdiqy/zi7xA\nLSFxLy5vAgMBAAECggEANKH/GdjPFTd9HadhDSPTXWJX8wxySmI7huHbdALKCkR7\nkFHGSv5spTaL4aFzDpza0QMlSNxIEBeWqrMb2tXB/tIQ0eUiVvMcEGUIQy139oNC\n5fY3OaSoB/ebc+RTmoKDQw8t8LGXGukpmmhlTurRVewx8twn/qf3h6oQNrZvFadc\n8Zkq/xv3il4mmbJ26qQp5ZSJh+1nj+xr4chypblUybn/lCBQDQW2qFqA43kGnrbB\nPTdQcQD/bTShw+cvWR8/cKovOYYgNSurxUqewnysOu4JSOvNWGn3KfblWWijCw2T\nIex8YOaaH0BCiCm+3KjXMbpuw78IW5kuNoG/b6SV+QKBgQDLtjR9Yso1dluzajAS\nUsNsZvpkDLdqdBz5VxXBg2Ye52mhUDK+oUXgciDRKPuq1Vb6hRdFHIGb0gWHggDG\nDjflVaYJcjScmExKBchzZyjC3tyMmDkbEa+aITuJT0llHMwALRYBnco3QYEYHavD\n8E6MUqXttNM0ILv+GrNTTdLgMwKBgQDEpqoVgi7piCrvMgIlKVtxLXCTJ23IrENB\nm8PkEX1hRjZd89pL2ZfUaHAAPaj8BBgnox1ZG9yIln+RobLuG7VXmvUpze82kKUL\nPawtmxGG8N01fNXjWuYeHkRsn7l7Svn0hNeSVJBZ3qrylRv342sHwkw6jTknbOsn\nOAX1p6bM1QKBgQCXln54z4qpPen/GIWtHOlPQVISIWRbUww8fxExbxYO6SUxZPxd\n3qSg4EyLWHPuK9MNmPw38X6A9UgoDhWFTA9MGO/1F4cPAEXEz4jaV2l9mVmFRcE4\n43BIwXIMO3PiSguEFgjKKyDO/W+TAoFOzQOmZ9oRiP2hTLqX3EaVNtQ1AQKBgC4L\nXA23MqbJlEv3aJss6NVCL3a1J7Zx5zmIcECJe9L37qjm/Pj/lNZOMdNMnLGNf95g\nCfIgXO26V1pRAyVPZZGCnd7Q8i7ThWFxakwvX9Y5tYHdnfMjCHiK27iXWYWt04LW\nS+deV4JDacFs+mR7YkcpzlFzWauKjDDdpD+Vpq+VAoGBAIUkH7RPMOc67Ymmre7h\nFOOZW4JzHmaGnKza4U+D/8q/XosdPCpxuTtKLJIQ9loduGhpusMs+FIPArQg+1fI\nkqv0AxMntHWdiwifCMLmaXALtpxb/q1ShJ8VPHCpMPNLyE3VSIsHDSOY04UiK3EN\noXYGC0KI5JSnxcTTtnCs6kWE\n-----END PRIVATE KEY-----\n",
+  "client_email": "vertex-ai-scraper@the-capsule-453800-c8.iam.gserviceaccount.com",
+  "client_id": "100776062341126254899",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/vertex-ai-scraper%40the-capsule-453800-c8.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
