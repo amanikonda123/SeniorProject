@@ -3,12 +3,13 @@ import re
 import numpy as np
 import faiss
 import pickle
+from tqdm import tqdm
 from dotenv import load_dotenv
 from mistralai.client import MistralClient
 from customer_reviews.reviews_summary import get_review_summary
 from urllib.parse import urlparse
 import nltk
-nltk.download('punkt_tab')
+# nltk.download('punkt_tab')
 
 
 # Load environment variables
@@ -54,6 +55,7 @@ def chunk_reviews(texts: list) -> list:
 def get_or_build_index(sku: str, chunks: list) -> (faiss.IndexFlatL2, list):
     """
     Load cached embeddings/docs if available, otherwise compute and cache them.
+    Shows embedding progress on first run.
     Returns a FAISS index and the list of text chunks.
     """
     cache_dir = ".cache_embeddings"
@@ -62,16 +64,26 @@ def get_or_build_index(sku: str, chunks: list) -> (faiss.IndexFlatL2, list):
     docs_path = os.path.join(cache_dir, f"{sku}_docs.pkl")
 
     if os.path.exists(emb_path) and os.path.exists(docs_path):
+        print(f"Loading cached embeddings for SKU: {sku}")
         embeddings = np.load(emb_path)
         with open(docs_path, 'rb') as f:
             docs = pickle.load(f)
     else:
-        embeddings = np.stack([get_text_embedding(chunk) for chunk in chunks])
+        print(f"Generating embeddings for SKU: {sku} (this may take a minute)...")
+        embeddings = []
+        for chunk in tqdm(chunks, desc="Embedding review chunks", unit="chunk"):
+            emb = get_text_embedding(chunk)
+            embeddings.append(emb)
+        embeddings = np.stack(embeddings)
         docs = chunks
+
+        # Save to cache
         np.save(emb_path, embeddings)
         with open(docs_path, 'wb') as f:
             pickle.dump(docs, f)
+        print(f"Saved {len(embeddings)} embeddings to cache.")
 
+    # Build FAISS index
     dim = embeddings.shape[1]
     index = faiss.IndexFlatL2(dim)
     index.add(embeddings)
