@@ -1,3 +1,5 @@
+# rag_exp.py
+
 import os
 import re
 import numpy as np
@@ -9,117 +11,66 @@ from mistralai.client import MistralClient
 from customer_reviews.reviews_summary import get_review_summary
 from urllib.parse import urlparse
 import nltk
-# nltk.download('punkt_tab')
 
+# nltk.download('punkt')  # if running first time
 
-# Load environment variables
 load_dotenv()
-
-# Initialize Mistral client
 client = MistralClient(api_key=os.getenv("MISTRAL_API_KEY"))
 model_name = "open-mistral-7b"
 
-# --- Utility Functions ---
-
 def extract_sku_from_url(url: str) -> str:
-    """
-    Extracts the numeric SKU from a Walmart product URL.
-    """
     parsed = urlparse(url)
-    segments = [seg for seg in parsed.path.split('/') if seg]
-    if segments and segments[-1].isdigit():
-        return segments[-1]
-    match = re.search(r"/(\d{5,})(?:$|\?)", url)
-    return match.group(1) if match else ""
-
+    segs = [s for s in parsed.path.split('/') if s]
+    if segs and segs[-1].isdigit():
+        return segs[-1]
+    m = re.search(r"/(\d{5,})(?:$|\?)", url)
+    return m.group(1) if m else ""
 
 def get_text_embedding(text: str) -> np.ndarray:
-    """
-    Generate and return a float32 numpy embedding for the given text
-    using Mistral's embedding endpoint.
-    """
     resp = client.embeddings(model="mistral-embed", input=[text])
     return np.array(resp.data[0].embedding, dtype="float32")
 
-
 def chunk_reviews(texts: list) -> list:
-    """
-    Split each review into sentences for granular retrieval.
-    """
     chunks = []
-    for text in texts:
-        chunks.extend(nltk.sent_tokenize(text))
+    for t in texts:
+        chunks.extend(nltk.sent_tokenize(t))
     return chunks
 
-
 def get_or_build_index(sku: str, chunks: list) -> (faiss.IndexFlatL2, list):
-    """
-    Load cached embeddings/docs if available, otherwise compute and cache them.
-    Shows embedding progress on first run.
-    Returns a FAISS index and the list of text chunks.
-    """
     cache_dir = ".cache_embeddings"
     os.makedirs(cache_dir, exist_ok=True)
     emb_path = os.path.join(cache_dir, f"{sku}_embeddings.npy")
     docs_path = os.path.join(cache_dir, f"{sku}_docs.pkl")
 
     if os.path.exists(emb_path) and os.path.exists(docs_path):
-        print(f"Loading cached embeddings for SKU: {sku}")
-        embeddings = np.load(emb_path)
+        embs = np.load(emb_path)
         with open(docs_path, 'rb') as f:
             docs = pickle.load(f)
     else:
-        print(f"Generating embeddings for SKU: {sku} (this may take a minute)...")
-        embeddings = []
-        for chunk in tqdm(chunks, desc="Embedding review chunks", unit="chunk"):
-            emb = get_text_embedding(chunk)
-            embeddings.append(emb)
-        embeddings = np.stack(embeddings)
+        embs_list = []
+        for c in tqdm(chunks, desc="Embedding review chunks"):
+            embs_list.append(get_text_embedding(c))
+        embs = np.stack(embs_list)
         docs = chunks
-
-        # Save to cache
-        np.save(emb_path, embeddings)
+        np.save(emb_path, embs)
         with open(docs_path, 'wb') as f:
             pickle.dump(docs, f)
-        print(f"Saved {len(embeddings)} embeddings to cache.")
 
-    # Build FAISS index
-    dim = embeddings.shape[1]
-    index = faiss.IndexFlatL2(dim)
-    index.add(embeddings)
-    return index, docs
-
-
-def retrieve_documents(query: str, docs: list, index: faiss.IndexFlatL2, k: int = 3) -> str:
-    """
-    Retrieve top-k most similar document chunks for the query.
-    Returns the concatenated text of those chunks.
-    """
-    q_emb = get_text_embedding(query).reshape(1, -1)
-    _, idxs = index.search(q_emb, k)
-    return " ".join(docs[i] for i in idxs[0])
-
+    idx = faiss.IndexFlatL2(embs.shape[1])
+    idx.add(embs)
+    return idx, docs
 
 def run_mistral(prompt: str) -> str:
-    """
-    Send the prompt to Mistral Chat and return the generated response.
-    """
-    messages = [{"role": "user", "content": prompt}]
-    resp = client.chat(model=model_name, messages=messages)
+    resp = client.chat(model=model_name, messages=[{"role":"user","content":prompt}])
     return resp.choices[0].message.content
 
-
-def run_rag_on_reviews(product_url: str, query: str, top_k: int = 3) -> (str, str):
-    """
-    Full RAG workflow for reviews:
-      1. Extract SKU
-      2. Scrape/load reviews
-      3. Split reviews into chunks
-      4. Load/build FAISS index (cached)
-      5. Retrieve context
-      6. Call Mistral for answer
-      Returns (answer, retrieved_context).
-    """
+def run_standard_rag_on_reviews(
+    product_url: str,
+    question: str,
+    base_k: int = 3,
+    max_k: int = 10,
+    thresh_ratio: float = 0.7
+) -> (str, str):
     sku = extract_sku_from_url(product_url)
     if not sku:
         raise ValueError("Invalid product URL: could not extract SKU.")
@@ -141,15 +92,54 @@ def run_rag_on_reviews(product_url: str, query: str, top_k: int = 3) -> (str, st
     texts = records
     # Now split these combined review strings into sentences
     chunks = chunk_reviews(texts)
+    idx, docs = get_or_build_index(sku, chunks)
 
-    index, docs = get_or_build_index(sku, chunks)
+    # embed & retrieve up to max_k
+    qemb = get_text_embedding(question).reshape(1, -1)
+    scores, ids = idx.search(qemb, max_k)
+    candidates = [(scores[0][i], docs[ids[0][i]]) for i in range(max_k)]
 
-    context = retrieve_documents(query, docs, index, k=top_k)
-    prompt = (
-        f"Answer the following question based on the provided customer reviews context.\n\n"
-        f"Context: {context}\n\n"
-        f"Question: {query}\n"
-        f"Answer:"
-    )
+    cutoff = candidates[0][0] * thresh_ratio
+    selected = [doc for score, doc in candidates if score >= cutoff]
+    if not selected:
+        selected = [doc for _, doc in candidates[:base_k]]
+    context = " ".join(selected)
+
+    prompt = f"Context: {context}\nQuestion: {question}\nAnswer:"
     answer = run_mistral(prompt)
     return answer, context
+
+def run_multihop_rag_on_reviews(
+    product_url: str,
+    question: str,
+    hops: int = 2,
+    base_k: int = 3,
+    max_k: int = 10
+) -> (str, list):
+    sku = extract_sku_from_url(product_url)
+    if not sku:
+        raise ValueError("Invalid product URL.")
+    _, df, _ = get_review_summary("CSV", sku)
+    texts = df["text"].astype(str).tolist()
+    chunks = chunk_reviews(texts)
+    idx, docs = get_or_build_index(sku, chunks)
+
+    contexts = []
+    current_query = question
+    for i in range(hops):
+        k_i = max_k if i == 0 else base_k
+        qemb = get_text_embedding(current_query).reshape(1, -1)
+        scores, ids = idx.search(qemb, k_i)
+        ctx = " ".join(docs[ids[0][j]] for j in range(min(k_i, len(ids[0]))))
+        contexts.append(ctx)
+
+        prompt = f"Context: {ctx}\nQuestion: {current_query}\nAnswer:"
+        current_query = run_mistral(prompt)
+
+    final_ctx = "\n---\n".join(contexts)
+    final_prompt = f"Contexts:\n{final_ctx}\nOriginal question: {question}\nAnswer:"
+    final_answer = run_mistral(final_prompt)
+    return final_answer, contexts
+
+# alias old behavior
+run_rag_on_reviews = run_standard_rag_on_reviews
