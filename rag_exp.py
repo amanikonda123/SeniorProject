@@ -125,7 +125,21 @@ def run_rag_on_reviews(product_url: str, query: str, top_k: int = 3) -> (str, st
         raise ValueError("Invalid product URL: could not extract SKU.")
 
     _, df_reviews, _ = get_review_summary("CSV", sku)
-    texts = df_reviews["text"].astype(str).tolist()
+    records = []
+    for _, row in df_reviews.iterrows():
+        parts = [
+            f"Product: {row.get('productName','')}",
+            f"Title: {row.get('title','')}",
+            f"Rating: {row.get('rating','')}",
+            f"Submitted: {row.get('submissionTime','')}",
+            f"Badges: {row.get('badges','')}",
+            f"Positive feedback: {row.get('positivefeedback','')}",
+            f"Negative feedback: {row.get('negativefeedback','')}",
+            f"Review: {row.get('text','')}"
+        ]
+        records.append(". ".join(parts))
+    texts = records
+    # Now split these combined review strings into sentences
     chunks = chunk_reviews(texts)
 
     index, docs = get_or_build_index(sku, chunks)
