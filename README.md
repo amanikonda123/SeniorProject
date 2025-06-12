@@ -33,26 +33,33 @@ Supports four RAG strategies and an end-to-end evaluation suite.
 
 ### 1. Clone & Enter the Repository
 
-````bash
+```bash
 git clone https://github.com/amanikonda123/SeniorProject.git
 cd SeniorProject
+```
 
 ### 2. Create Virtual Environment
+
 ```bash
 python3 -m venv venv
 source venv/bin/activate
+```
 
 ### 3. Configure Environment Variables
+
 Create a .env file in the project root with:
 
 ```bash
 GOOGLE_API_KEY=<your Google API key>
 MISTRAL_API_KEY=<your Mistral API key>
 HUGGINGFACE_TOKEN=<optional for private HF models>
+```
 
 ### 4. Install Dependencies
+
 ```bash
 pip install -r requirements.txt
+```
 
 ## Usage
 
@@ -60,6 +67,7 @@ pip install -r requirements.txt
 
 ```bash
 streamlit run app.py
+```
 
 ### 1. Enter a Walmart product URL
 
@@ -68,4 +76,3 @@ streamlit run app.py
 ### 2. Select a RAG mode
 
 ### 3. Ask questions; view answers and retrieved context
-````
