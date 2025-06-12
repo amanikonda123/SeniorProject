@@ -73,9 +73,24 @@ def run_standard_rag_on_reviews(
 ) -> (str, str):
     sku = extract_sku_from_url(product_url)
     if not sku:
-        raise ValueError("Invalid product URL.")
-    _, df, _ = get_review_summary("CSV", sku)
-    texts = df["text"].astype(str).tolist()
+        raise ValueError("Invalid product URL: could not extract SKU.")
+
+    _, df_reviews, _ = get_review_summary("CSV", sku)
+    texts = df_reviews["text"].astype(str).tolist()
+    records = []
+    for _, row in df_reviews.iterrows():
+        parts = [
+            f"Product: {row.get('productName','')}",
+            f"Title: {row.get('title','')}",
+            f"Rating: {row.get('rating','')}",
+            f"Submitted: {row.get('submissionTime','')}",
+            f"Badges: {row.get('badges','')}",
+            f"Positive feedback: {row.get('positivefeedback','')}",
+            f"Negative feedback: {row.get('negativefeedback','')}",
+            f"Review: {row.get('text','')}"
+        ]
+        records.append(". ".join(parts))
+    texts = records
     chunks = chunk_reviews(texts)
     idx, docs = get_or_build_index(sku, chunks)
 
