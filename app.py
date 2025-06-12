@@ -1,5 +1,7 @@
 # app.py
 
+# app.py
+
 import os
 import re
 import streamlit as st
@@ -50,6 +52,10 @@ if "df_reviews" in st.session_state:
 
     st.markdown("#### Top 5 Reviews")
     st.dataframe(st.session_state.df_reviews.head(5), hide_index=True)
+    st.write(st.session_state.summary["text"])
+
+    st.markdown("#### Top 5 Reviews")
+    st.dataframe(st.session_state.df_reviews.head(5), hide_index=True)
 
     st.markdown("---")
     mode = st.radio(
@@ -65,6 +71,7 @@ if "df_reviews" in st.session_state:
     st.markdown("---")
     with st.form("query_form"):
         question = st.text_input("Ask a question about these reviews:")
+        ask_btn = st.form_submit_button("Submit")
         ask_btn = st.form_submit_button("Submit")
     if ask_btn and question:
         if mode == "Standard":
@@ -96,6 +103,13 @@ if "df_reviews" in st.session_state:
         idx = len(st.session_state.history)
         st.markdown(f"**A{idx}:** {answer}")
 
+        with st.expander("🔍 Retrieved Context"):
+            st.write(context)
+
+        idx = len(st.session_state.history)
+        st.markdown(f"**A{idx}:** {answer}")
+
     if st.button("Clear Conversation History"):
         st.session_state.history = []
+        st.session_state.multi_contexts = []
         st.session_state.multi_contexts = []
