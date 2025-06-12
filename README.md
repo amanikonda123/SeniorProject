@@ -1,62 +1,71 @@
-# Customer Review Engine
+# Walmart E-Commerce Customer Review Engine
 
-This project automates the process of harvesting and summarizing Amazon customer reviews for a specified product. Using OpenAI, it provides a concise summary of customer feedback, helping users quickly understand the general sentiment and key points from multiple reviews.
+A Streamlit application to explore and summarize Walmart product reviews using Retrieval-Augmented Generation (RAG).  
+Supports four RAG strategies and an end-to-end evaluation suite.
 
-## Demo
+---
 
-![Demo Image](image.png)
+## Features
 
-## Getting Started
+1. **Review Summarization**
 
-### Installation
+   - Scrape customer reviews by SKU or URL.
+   - Handle long texts with token counting and chunking.
+   - Generate summaries via Google Gemini or Mistral models.
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/shahmitul-genai/ReviewEngine
-   ```
+2. **RAG Chatbot**
 
-2. Navigate to the project directory
-   ```bash
-   cd customer_reviews
-   ```
+   - **Standard (Single-Hop):** Fixed-k snippet retrieval.
+   - **Multi-Hop:** Iterative retrieval & answering over multiple hops.
+   - **Adaptive:** Threshold-driven dynamic retrieval.
+   - **Hybrid:** Combines adaptive breadth + focused depth, then synthesizes.
+   - Stateful Streamlit UI with chat history, context expander, and mode selector.
 
-3. Install Poetry using pip (if not already installed):
-   ```bash
-   pip install poetry
-   ```
+3. **Evaluation Suite**
+   - Built-in RAGAS integration for automated metrics.
+   - **Retrieval:** nDCG@5
+   - **Generation:** BERTScore (F1)
+   - **Factuality:** QA-consistency check
+   - **Efficiency:** Context-token usage statistics
+   - Example evaluation on custom “creatine” reviews and HotpotQA benchmark.
 
-4. Activate the virtual environment created by Poetry:
-   ```bash
-   poetry shell
-   ```
+## Setup
 
-5. Install project dependencies using Poetry:
-   ```bash
-   poetry install
-   ```
+### 1. Clone & Enter the Repository
 
-### Configuration
+````bash
+git clone https://github.com/amanikonda123/SeniorProject.git
+cd SeniorProject
 
-Create a `.env` file and add your own OpenAI API key in the `.env` file as follows:
+### 2. Create Virtual Environment
+```bash
+python3 -m venv venv
+source venv/bin/activate
+
+### 3. Configure Environment Variables
+Create a .env file in the project root with:
 
 ```bash
-OPENAI_API_KEY='your-key-here'
-```
+GOOGLE_API_KEY=<your Google API key>
+MISTRAL_API_KEY=<your Mistral API key>
+HUGGINGFACE_TOKEN=<optional for private HF models>
 
-### Usage
+### 4. Install Dependencies
+```bash
+pip install -r requirements.txt
 
-1. After installing the dependencies, you can run the Streamlit app in root directory by executing the following command:
-   
-   ```bash
-   streamlit run app_cr.py
-   ```
+## Usage
 
-2. Follow the prompts to input the product description 
+### Run the App
 
-3. Move the slide bar to select number of reviews to pull.
+```bash
+streamlit run app.py
 
-4. The script will display the top 10 ranking customer reviews and the overall review summary.
+### 1. Enter a Walmart product URL
 
-## License
+### 2. Load or cache reviews
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+### 2. Select a RAG mode
+
+### 3. Ask questions; view answers and retrieved context
+````
