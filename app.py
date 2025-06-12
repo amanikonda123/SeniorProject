@@ -1,70 +1,83 @@
+# app.py
+
 import os
 import re
-import time
 import streamlit as st
-import pandas as pd
-from apify_client import ApifyClient
+from dotenv import load_dotenv
 from customer_reviews.reviews_summary import get_review_summary
-from customer_reviews.rag_chatbot import chat_with_reviews
+from rag_exp import (
+    extract_sku_from_url,
+    run_standard_rag_on_reviews,
+    run_multihop_rag_on_reviews
+)
 
-# --- Helper to extract SKU ---
-def extract_sku_from_url(url: str) -> str:
-    try:
-        from urllib.parse import urlparse
-        parsed = urlparse(url)
-        segments = [seg for seg in parsed.path.split('/') if seg]
-        if segments and segments[-1].isdigit():
-            return segments[-1]
-        match = re.search(r"/(\d{5,})(?:$|\?)", url)
-        return match.group(1) if match else ""
-    except:
-        return ""
+load_dotenv()
 
-# --- Streamlit UI ---
 st.title("Walmart E-Commerce Customer Review Engine")
-st.header("Please provide the requested information")
+st.header("Provide the URL, then ask questions about these reviews")
 
-with st.form("user_interaction"):
-    product_url = st.text_input(
-        "Please input your Walmart product URL:",
-        placeholder="https://www.walmart.com/ip/.../17235783"
-    )
-    submit_button = st.form_submit_button("Submit")
+if "history" not in st.session_state:
+    st.session_state.history = []
+if "multi_contexts" not in st.session_state:
+    st.session_state.multi_contexts = []
 
-if submit_button:
+# Step 1: load reviews
+with st.form("url_form"):
+    product_url = st.text_input("Walmart product URL", placeholder="https://www.walmart.com/ip/.../17235783")
+    load_btn = st.form_submit_button("Load Reviews")
+if load_btn and product_url:
     sku = extract_sku_from_url(product_url)
     if not sku:
-        st.error("Could not extract SKU from the provided URL. Please check the URL and try again.")
+        st.error("Could not extract SKU.")
         st.stop()
+    with st.spinner("Scraping reviews…"):
+        tokens, df_reviews, summary = get_review_summary("CSV", sku)
+    st.session_state.product_url = product_url
+    st.session_state.df_reviews = df_reviews
+    st.session_state.summary = summary
+    st.session_state.history = []
+    st.session_state.multi_contexts = []
 
-    with st.spinner("Scraping reviews..."):
-        tokens, df_reviews, summary = get_review_summary(
-            "CSV", sku
-        )
-    st.success(f"Scraped {len(df_reviews)} reviews successfully!")
+# Step 2: display & chat
+if "df_reviews" in st.session_state:
+    st.markdown("#### Initial Summary of Reviews")
+    st.write(st.session_state.summary["text"])
 
-    # Download button for full reviews CSV
-    csv = df_reviews.to_csv(index=False).encode('utf-8')
-    st.download_button(
-        label="Download All Reviews as CSV",
-        data=csv,
-        file_name=f"{sku}_reviews.csv",
-        mime="text/csv"
-    )
+    st.markdown("#### Top 5 Reviews")
+    st.dataframe(st.session_state.df_reviews.head(5), hide_index=True)
 
-    # Show a preview
-    st.markdown("### Top 10 Customer Reviews:")
-    st.dataframe(df_reviews.head(10), hide_index=True)
+    st.markdown("---")
+    mode = st.radio("Select RAG Mode:", ["Standard (Single-Hop)", "Multi-Hop"])
 
-    # Display summaries
-    st.markdown("### Customer reviews summary:")
-    st.write(summary["text"])
+    st.markdown("### Conversation History")
+    for i, (q, a) in enumerate(st.session_state.history, 1):
+        st.markdown(f"**Q{i}:** {q}")
+        st.markdown(f"**A{i}:** {a}")
 
-    # st.markdown("---")
-    # st.markdown("## Chat with the reviews")
-    # question = st.text_input("Ask a question about these reviews:")
-    # if question:
-    #     with st.spinner("Thinking…"):
-    #         answer = chat_with_reviews(sku, question, top_k=5)
-    #     st.markdown("### Answer:")
-    #     st.write(answer)
+    st.markdown("---")
+    with st.form("query_form"):
+        question = st.text_input("Ask a question about these reviews:")
+        ask_btn = st.form_submit_button("Submit")
+    if ask_btn and question:
+        if mode == "Standard (Single-Hop)":
+            answer, context = run_standard_rag_on_reviews(
+                st.session_state.product_url, question
+            )
+        else:
+            answer, contexts = run_multihop_rag_on_reviews(
+                st.session_state.product_url, question
+            )
+            st.session_state.multi_contexts.extend(contexts)
+            context = "\n---\n".join(st.session_state.multi_contexts)
+
+        st.session_state.history.append((question, answer))
+
+        with st.expander("🔍 Retrieved Context"):
+            st.write(context)
+
+        idx = len(st.session_state.history)
+        st.markdown(f"**A{idx}:** {answer}")
+
+    if st.button("Clear Conversation History"):
+        st.session_state.history = []
+        st.session_state.multi_contexts = []
