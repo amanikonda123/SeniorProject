@@ -52,10 +52,6 @@ if "df_reviews" in st.session_state:
 
     st.markdown("#### Top 5 Reviews")
     st.dataframe(st.session_state.df_reviews.head(5), hide_index=True)
-    st.write(st.session_state.summary["text"])
-
-    st.markdown("#### Top 5 Reviews")
-    st.dataframe(st.session_state.df_reviews.head(5), hide_index=True)
 
     st.markdown("---")
     mode = st.radio(
@@ -63,7 +59,7 @@ if "df_reviews" in st.session_state:
         ["Standard", "Multi-Hop", "Adaptive", "Hybrid"]
     )
 
-    st.markdown("### Conversation History")
+    st.markdown("### Walmart Customer Reviews ChatBot Q/A")
     for i, (q, a) in enumerate(st.session_state.history, 1):
         st.markdown(f"**Q{i}:** {q}")
         st.markdown(f"**A{i}:** {a}")
@@ -71,7 +67,6 @@ if "df_reviews" in st.session_state:
     st.markdown("---")
     with st.form("query_form"):
         question = st.text_input("Ask a question about these reviews:")
-        ask_btn = st.form_submit_button("Submit")
         ask_btn = st.form_submit_button("Submit")
     if ask_btn and question:
         if mode == "Standard":
@@ -88,7 +83,7 @@ if "df_reviews" in st.session_state:
             answer, context = run_adaptive_rag_on_reviews(
                 st.session_state.product_url, question
             )
-        else:  # Hybrid
+        else:
             answer, contexts = run_hybrid_rag_on_reviews(
                 st.session_state.product_url, question
             )
@@ -103,13 +98,15 @@ if "df_reviews" in st.session_state:
         idx = len(st.session_state.history)
         st.markdown(f"**A{idx}:** {answer}")
 
-        with st.expander("🔍 Retrieved Context"):
-            st.write(context)
-
-        idx = len(st.session_state.history)
-        st.markdown(f"**A{idx}:** {answer}")
-
-    if st.button("Clear Conversation History"):
-        st.session_state.history = []
-        st.session_state.multi_contexts = []
-        st.session_state.multi_contexts = []
+    # Two buttons: clear last Q/A vs. clear all history
+    st.markdown("---")
+    col1, col2, _ = st.columns([2,3,5])
+    with col1:
+        if st.button("Clear Last Q/A"):
+            if st.session_state.history:
+                st.session_state.history.pop()
+                st.session_state.multi_contexts = []
+    with col2:
+        if st.button("Clear Entire Conversation"):
+            st.session_state.history = []
+            st.session_state.multi_contexts = []

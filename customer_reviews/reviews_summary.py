@@ -229,7 +229,7 @@ def gemini_summary(text: str, max_output_tokens: int = 500) -> str:
         resp = client.models.generate_content(
             model="gemini-2.0-flash-001",
             contents=(
-                "Combine and polish these partial summaries into a single cohesive summary. Provide a pro/con list and highlight the overall rating. Begin the response directly with the summary. Here are the partial reviews:\n\n"
+                "Combine and polish these partial summaries into a single cohesive summary. Provide a pro/con list. Begin the response directly with the summary. Here are the partial reviews:\n\n"
                 + combined
             ),
             config=types.GenerateContentConfig(

@@ -88,13 +88,6 @@ def run_standard_rag_on_reviews(
     max_k: int = 10,
     thresh_ratio: float = 0.7
 ) -> (str, str):
-def run_standard_rag_on_reviews(
-    product_url: str,
-    question: str,
-    base_k: int = 3,
-    max_k: int = 10,
-    thresh_ratio: float = 0.7
-) -> (str, str):
     sku = extract_sku_from_url(product_url)
     if not sku:
         raise ValueError("Invalid product URL: could not extract SKU.")
@@ -160,7 +153,8 @@ def run_multihop_rag_on_reviews(
         prompt = f"Context: {ctx}\nQuestion: {current_query}\nAnswer:"
         current_query = run_mistral(prompt)
 
-    final_ctx = "\n---\n".join(contexts)
+    unique_contexts = list(dict.fromkeys(st.session_state.multi_contexts))
+    final_ctx = "\n---\n".join(unique_contexts)
     final_prompt = f"Contexts:\n{final_ctx}\nOriginal question: {question}\nAnswer:"
     final_answer = run_mistral(final_prompt)
     return final_answer, contexts
@@ -258,3 +252,4 @@ def run_hybrid_rag_on_reviews(
     )
     final_answer = run_mistral(final_prompt)
     return final_answer, [ctx0, ctx1]
+
