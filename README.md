@@ -63,16 +63,16 @@ pip install -r requirements.txt
 
 ## Usage
 
-### Run the App
+### 1. Run the App
 
 ```bash
 streamlit run app.py
 ```
 
-### 1. Enter a Walmart product URL
+### 2. Enter a Walmart product URL
 
-### 2. Load or cache reviews
+### 3. Load or cache reviews (scrape if not cached)
 
-### 2. Select a RAG mode
+### 4. Select a RAG mode
 
-### 3. Ask questions; view answers and retrieved context
+### 5. Ask questions; view answers and retrieved context
