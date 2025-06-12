@@ -8,6 +8,10 @@ from rag_exp import chunk_reviews, get_or_build_index, retrieve_documents, run_m
 # Load environment variables
 load_dotenv()
 
+# Initialize conversation history
+if "history" not in st.session_state:
+    st.session_state.history = []
+
 # Helper to extract SKU from a Walmart URL
 def extract_sku_from_url(url: str) -> str:
     from urllib.parse import urlparse
@@ -39,10 +43,10 @@ if "df_reviews" not in st.session_state:
         with st.spinner("Scraping reviews…"):
             tokens, df, summary = get_review_summary("CSV", sku)
         # Store in session
+        st.session_state.product_url = product_url
         st.session_state.df_reviews   = df
         st.session_state.summary      = summary
-        st.session_state.product_url  = product_url
-        # Build or load cached FAISS index once
+        # Build or load cached FAISS index
         with st.spinner("Embedding reviews and building index…"):
             texts  = df["text"].astype(str).tolist()
             chunks = chunk_reviews(texts)
@@ -50,32 +54,47 @@ if "df_reviews" not in st.session_state:
         st.session_state.rag_index = index
         st.session_state.rag_docs  = docs
 
-# Step 2: Display reviews, summary, and query form
+# Step 2: Display summary and chat UI once loaded
 if "df_reviews" in st.session_state:
-    df      = st.session_state.df_reviews
-    summary = st.session_state.summary
-    st.success(f"Loaded {len(df)} reviews successfully!")
-    st.markdown("#### Top 10 Customer Reviews")
-    st.dataframe(df.head(10), hide_index=True)
-    st.markdown("#### Initial Summary")
+    summary     = st.session_state.summary
+    product_url = st.session_state.product_url
+
+    st.markdown("#### Initial Summary of Reviews")
     st.write(summary["text"])
+
+    st.markdown("---")
+    st.markdown("### Conversation History")
+    for i, (q, a) in enumerate(st.session_state.history, 1):
+        st.markdown(f"**Q{i}:** {q}")
+        st.markdown(f"**A{i}:** {a}")
 
     st.markdown("---")
     # Query form
     with st.form("query_form"):
-        question = st.text_input("Ask a question about these reviews")
-        ask_btn  = st.form_submit_button("Submit Question")
+        question = st.text_input("Ask a question about these reviews:")
+        ask_btn  = st.form_submit_button("Submit")
     if ask_btn and question:
+        # Build retrieval query including history
+        history_text = "\n".join([f"Q: {q}\nA: {a}" for q, a in st.session_state.history])
+        retrieval_query = (history_text + "\n" + question) if history_text else question
         # Retrieve context
         with st.spinner("Retrieving relevant reviews…"):
-            context = retrieve_documents(question, st.session_state.rag_docs, st.session_state.rag_index)
+            context = retrieve_documents(retrieval_query, st.session_state.rag_docs, st.session_state.rag_index)
         # Generate answer
+        prompt = (
+            f"You are a helpful assistant.\n"
+            f"{history_text}\n"
+            f"Context: {context}\n"
+            f"Q: {question}\nA:"
+        )
         with st.spinner("Generating answer…"):
-            prompt = (
-                f"Answer the question based on this context:\n{context}\n\nQuestion: {question}\nAnswer:"
-            )
             answer = run_mistral(prompt)
-        st.markdown("### Retrieved Context")
-        st.write(context)
-        st.markdown("### Answer")
-        st.write(answer)
+        # Store in history
+        st.session_state.history.append((question, answer))
+        # Display new turn
+        st.markdown("**Q:** " + question)
+        st.markdown("**A:** " + answer)
+
+    # Clear history button
+    if st.button("Clear Conversation History"):
+        st.session_state.history = []
