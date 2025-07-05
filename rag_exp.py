@@ -84,9 +84,9 @@ def run_mistral(prompt: str) -> str:
 def run_standard_rag_on_reviews(
     product_url: str,
     question: str,
-    base_k: int = 3,
-    max_k: int = 10,
-    thresh_ratio: float = 0.7
+    base_k: int = 1,
+    max_k: int = 3,
+    thresh_ratio: float = 0.5
 ) -> (str, str):
     sku = extract_sku_from_url(product_url)
     if not sku:
@@ -94,20 +94,6 @@ def run_standard_rag_on_reviews(
 
     _, df_reviews, _ = get_review_summary("CSV", sku)
     texts = df_reviews["text"].astype(str).tolist()
-    records = []
-    for _, row in df_reviews.iterrows():
-        parts = [
-            f"Product: {row.get('productName','')}",
-            f"Title: {row.get('title','')}",
-            f"Rating: {row.get('rating','')}",
-            f"Submitted: {row.get('submissionTime','')}",
-            f"Badges: {row.get('badges','')}",
-            f"Positive feedback: {row.get('positivefeedback','')}",
-            f"Negative feedback: {row.get('negativefeedback','')}",
-            f"Review: {row.get('text','')}"
-        ]
-        records.append(". ".join(parts))
-    texts = records
     chunks = chunk_reviews(texts)
     idx, docs = get_or_build_index(sku, chunks)
 
@@ -153,8 +139,7 @@ def run_multihop_rag_on_reviews(
         prompt = f"Context: {ctx}\nQuestion: {current_query}\nAnswer:"
         current_query = run_mistral(prompt)
 
-    unique_contexts = list(dict.fromkeys(st.session_state.multi_contexts))
-    final_ctx = "\n---\n".join(unique_contexts)
+    final_ctx = "\n---\n".join(contexts)
     final_prompt = f"Contexts:\n{final_ctx}\nOriginal question: {question}\nAnswer:"
     final_answer = run_mistral(final_prompt)
     return final_answer, contexts
